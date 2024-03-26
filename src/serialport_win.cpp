@@ -11,6 +11,8 @@
 #include <devpkey.h>
 #include <devguid.h>
 #include <wchar.h>
+#include <tchar.h>
+
 #pragma comment(lib, "setupapi.lib")
 
 #define ARRAY_SIZE(arr)     (sizeof(arr)/sizeof(arr[0]))
@@ -72,6 +74,59 @@ void ErrorCodeToString(const char* prefix, int errorCode, char *errorStr) {
   }
 }
 
+void PrintCommState(const char* prefix, DCB dcb)
+{
+    //  Print some of the DCB structure values
+    _tprintf( TEXT("\n%s BaudRate = %d, ByteSize = %d, Parity = %d, StopBits = %d, fOutxCtsFlow = %d, fOutxDsrFlow = %d, fDtrControl = %d, fDsrSensitivity = %d, fTXContinueOnXoff = %d, fOutX = %d, fInX = %d, fErrorChar = %d, fNull = %d, fRtsControl = %d, fAbortOnError = %d,  XonChar = %d, XoffChar = %d, ErrorChar = %d, EofChar = %d, EvtChar = %d\n"), 
+              prefix,
+              dcb.BaudRate,
+              dcb.ByteSize, 
+              dcb.Parity,
+              dcb.StopBits,
+              dcb.fOutxCtsFlow,
+              dcb.fOutxDsrFlow,
+              dcb.fDtrControl,
+              dcb.fDsrSensitivity,
+              dcb.fTXContinueOnXoff,
+              dcb.fOutX,
+              dcb.fInX,
+              dcb.fErrorChar,
+              dcb.fNull,
+              dcb.fRtsControl,
+              dcb.fAbortOnError,
+              dcb.XonChar,
+              dcb.XoffChar,
+              dcb.ErrorChar,
+              dcb.EofChar,
+              dcb.EvtChar
+            );
+}
+
+bool CompareDCB(const DCB& dcb1, const DCB& dcb2) {
+    return (
+        dcb1.BaudRate == dcb2.BaudRate &&
+        dcb1.ByteSize == dcb2.ByteSize &&
+        dcb1.Parity == dcb2.Parity &&
+        dcb1.StopBits == dcb2.StopBits &&
+        dcb1.fOutxCtsFlow == dcb2.fOutxCtsFlow &&
+        dcb1.fOutxDsrFlow == dcb2.fOutxDsrFlow &&
+        dcb1.fDtrControl == dcb2.fDtrControl &&
+        dcb1.fDsrSensitivity == dcb2.fDsrSensitivity &&
+        dcb1.fTXContinueOnXoff == dcb2.fTXContinueOnXoff &&
+        dcb1.fOutX == dcb2.fOutX &&
+        dcb1.fInX == dcb2.fInX &&
+        dcb1.fErrorChar == dcb2.fErrorChar &&
+        dcb1.fNull == dcb2.fNull &&
+        dcb1.fRtsControl == dcb2.fRtsControl &&
+        dcb1.fAbortOnError == dcb2.fAbortOnError &&
+        dcb1.XonChar == dcb2.XonChar &&
+        dcb1.XoffChar == dcb2.XoffChar &&
+        dcb1.ErrorChar == dcb2.ErrorChar &&
+        dcb1.EofChar == dcb2.EofChar &&
+        dcb1.EvtChar == dcb2.EvtChar
+    );
+}
+
 void AsyncCloseCallback(uv_handle_t* handle) {
   uv_async_t* async = reinterpret_cast<uv_async_t*>(handle);
   delete async;
@@ -109,16 +164,24 @@ void OpenBaton::Execute() {
     return;
   }
 
-  DCB dcb = { 0 };
-  SecureZeroMemory(&dcb, sizeof(DCB));
-  dcb.DCBlength = sizeof(DCB);
+  DCB dcbDefaultParams = { 0 };
+  SecureZeroMemory(&dcbDefaultParams, sizeof(DCB));
+  dcbDefaultParams.DCBlength = sizeof(DCB);
 
-  if (!GetCommState(file, &dcb)) {
+  BOOL getCommStateSuccess = GetCommState(file, &dcbDefaultParams);
+  printf("getCommStateSuccess %d\n", getCommStateSuccess);
+  PrintCommState("existing dcb params", dcbDefaultParams);  
+
+  if (!getCommStateSuccess) {
     ErrorCodeToString("Open (GetCommState)", GetLastError(), errorString);
     this->SetError(errorString);
     CloseHandle(file);
     return;
   }
+  
+  DCB dcb = { 0 };
+  SecureZeroMemory(&dcb, sizeof(DCB));
+  dcb.DCBlength = sizeof(DCB);
 
   if (hupcl) {
     dcb.fDtrControl = DTR_CONTROL_ENABLE;
@@ -196,11 +259,20 @@ void OpenBaton::Execute() {
     break;
   }
 
-  if (!SetCommState(file, &dcb)) {
-    ErrorCodeToString("Open (SetCommState)", GetLastError(), errorString);
-    this->SetError(errorString);
-    CloseHandle(file);
-    return;
+  BOOL isCommStateSame = CompareDCB(dcbDefaultParams, dcb);
+  printf("isCommStateSame %d\n", isCommStateSame);
+
+  if(!isCommStateSame) {
+    BOOL setCommStateSuccess = SetCommState(file, &dcb);
+    printf("setCommStateSuccess %d\n", setCommStateSuccess);
+    PrintCommState("new dcb params", dcb);
+
+    if (!setCommStateSuccess) {
+      ErrorCodeToString("Open (SetCommState)", GetLastError(), errorString);
+      this->SetError(errorString);
+      CloseHandle(file);
+      return;
+    }
   }
 
   // Set the timeouts for read and write operations.
