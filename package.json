@@ -91,9 +91,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/serialport/bindings-cpp.git"
+    "url": "https://github.com/loopsystechin/bindings-cpp"
   },
-  "funding": "https://opencollective.com/serialport/donate",
   "changelog": {
     "labels": {
       "breaking": ":boom: BREAKING CHANGES :boom:",
